@@ -1,6 +1,8 @@
-from typing import Optional
-from fastapi import Body, FastAPI, Path, Query
-from pydantic import BaseModel, Field
+from email.header import Header
+from typing import Literal, Optional
+from fastapi import Cookie, FastAPI
+from pydantic import BaseModel, EmailStr, HttpUrl
+
 
 app = FastAPI()
 
@@ -129,3 +131,122 @@ class Intem(BaseModel):
     """
     Nest Models
     """
+
+    # @app.put("/items/{item_id}")
+    # async def read_items(
+    #     item_id: UUID,
+    #     start_date: datetime | None = Body(None),
+    #     end_date: datetime | None = Body(None),
+    #     repeat_at: datetime | None = Body(None),
+    #     process_after: datetime | None = Body(None),
+    # ):
+    #     start_process = start_date + process_after
+    #     duration = end_date - process_after
+    #     return {'item_id': item_id, 'start_date': start_date, 'end_date': end_date, 'repeat_at': repeat_at, 'process_after': process_after, 'start_process': start_process, 'duration': duration}
+
+
+## Cookie and header Parameters
+@app.get("/items/")
+async def readd_items(cookies_id: str | None=Cookie(None),
+                      accept_encoding: str | None=Header(None),
+                      sec_ch_ua: str | None=Header(None),
+                      user_agent: str | None=Header(None),
+                      x_token: str | None=Header(None)):
+
+    return {
+        "cookies_id": cookies_id,
+        "Accept-Encoding": accept_encoding,
+        "Sec-CH-UA": sec_ch_ua,
+        "User-Agent": user_agent,
+        "X-Token Values": x_token,
+        }
+
+## Response Model
+
+class Item(BaseModel):
+    name: str
+    description: str | None = None
+    price: float
+    tax: float | None = None
+    tags: list[str] = []
+
+
+
+items = {
+    'foo': { "name": "Foo", "Price": 50.2},
+    'bar': { "name": "Bar", "Description": "The bartenders", "Price": 62.2, "Tax": 20.2},
+    "baz": { "name": "Baz", "Description": None, "Price": 50.2, "Tax": 20.2, "tags": []}
+}
+
+@app.get("/items/{item_id}", response_model=Item)
+async def read_item(item_id: Literal['foo', 'bar', 'baz']):
+    return items[item_id]
+
+@app.post("/items/")
+async def create_item(item: Item):
+    return item
+
+
+class UserIn(BaseModel):
+    username: str
+    password: str
+    email: EmailStr
+    full_name: str | None = None
+
+@app.post("/user/", response_model=UserIn)
+async def create_user(user: UserIn):
+    return user
+
+
+class UserBase(BaseModel):
+    username: str
+    email: EmailStr
+    full_name: str | None = None
+
+class UserInDB(UserBase):
+    password: str
+
+class UserOut(UserBase):
+    pass
+
+@app.post("/user/", response_model=UserOut)
+async def create_user(user: UserIn):
+    return user
+
+
+@app.get("/items/{item_id}/name", response_model= Item, response_model_include=["name", "description"])
+async def read_item_name(item_id: Literal['foo', 'bar', 'baz']):
+    return items[item_id]
+
+@app.get("/items/{item_id}/public", response_model= Item, response_model_exclude=["tax"])
+async def read_items_public_data(item_id: Literal['foo', 'bar', 'baz']):
+    return items[item_id]
+
+def fake_password_hasher(password: str):
+    return "supersecret" + password
+
+def fake_save_user(user: UserIn):
+    hashed_password = fake_password_hasher(user.password)
+    user_in_db = UserInDB(**user.dict(), password=hashed_password)
+    print(UserInDB( username=user_in_db.username, email=user_in_db.email, full_name=user_in_db.full_name))
+
+    return user_in_db
+
+@app.post("/user/", response_model=UserOut)
+async def create_user(user: UserIn):
+    user_saved = fake_save_user(user)
+    return user_saved
+class PlanItem(BaseModel):
+    name: str
+    description: str | None = None
+
+class CarItem(BaseModel):
+    name: str
+    description: str | None = None
+
+@app.get("/items/{item_id}", response_model= PlanItem | CarItem)
+async def read_item(item_id: Literal["Item 1", "Item 2"]):
+    if item_id == 1:
+        return PlanItem(name="Foo", description="There are some planes")
+    else:
+        return CarItem(name="Bar", description="There are some cars")
